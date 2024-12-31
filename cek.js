@@ -3,7 +3,7 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 require("dotenv").config();
 
-// Membaca konfigurasi blockchain dari file JSON
+// Membaca konfigurasi blockchain dan XPath dari file JSON
 const blockscanSites = JSON.parse(fs.readFileSync("blockscan_sites.json", "utf8"));
 
 // Membaca MNEMONICS_EVM dari file .env
@@ -41,7 +41,7 @@ const getBalanceFromBlockscan = async (url, xpath) => {
     }
 };
 
-// Fungsi utama untuk mengecek saldo menggunakan scraping
+// Fungsi untuk memeriksa saldo menggunakan banyak Blockscan secara paralel
 const checkBalance = async (blockchain, address) => {
     const site = blockscanSites[blockchain];
     if (!site) {
@@ -50,9 +50,20 @@ const checkBalance = async (blockchain, address) => {
     }
 
     const url = site.url.replace("{address}", address);
-    const xpath = site.xpath;
+    const xpath = site.xpath; // Menggunakan XPath yang diambil dari JSON
     console.log(`Mengambil saldo ${blockchain} untuk ${address} dari ${url}...`);
     return await getBalanceFromBlockscan(url, xpath);
+};
+
+// Membaca hasil yang sudah ada di output.json
+const loadExistingResults = () => {
+    try {
+        const data = fs.readFileSync("output.json", "utf8");
+        return JSON.parse(data);
+    } catch (error) {
+        // Jika file tidak ada atau kosong, kembalikan objek kosong
+        return {};
+    }
 };
 
 // Menulis hasil ke file JSON
@@ -61,39 +72,38 @@ const saveResultsToFile = (results, filename) => {
     console.log(`Hasil disimpan ke file ${filename}`);
 };
 
-// Menambahkan delay untuk mencegah terlalu banyak permintaan dalam waktu singkat
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Memeriksa saldo untuk semua mnemonics
+// Fungsi untuk memeriksa saldo secara paralel untuk banyak mnemonic
 const checkBalancesForMultipleMnemonics = async (mnemonicsList) => {
-    const results = {}; // Objek untuk menyimpan hasil
+    const results = loadExistingResults(); // Membaca hasil yang sudah ada
 
-    for (let i = 0; i < mnemonicsList.length; i++) {
-        const mnemonic = mnemonicsList[i];
-        console.log(`\n[${i + 1}/${mnemonicsList.length}] Memeriksa saldo untuk mnemonic: ${mnemonic.slice(0, 10)}...`);
+    const promises = mnemonicsList.map(async (mnemonic, index) => {
+        console.log(`\n[${index + 1}/${mnemonicsList.length}] Memeriksa saldo untuk mnemonic: ${mnemonic.slice(0, 10)}...`);
         const address = getWalletAddress(mnemonic);
         console.log(`Alamat Wallet: ${address}`);
 
         let walletResults = {};
         let hasBalance = false; // Flag untuk mengecek apakah ada saldo
 
-        // Memeriksa saldo di setiap blockchain
-        for (const blockchain of Object.keys(blockscanSites)) {
+        // Memeriksa saldo di setiap blockchain secara paralel
+        const blockchainPromises = Object.keys(blockscanSites).map(async (blockchain) => {
             const balance = await checkBalance(blockchain, address);
             if (balance !== "Gagal mendapatkan saldo" && balance !== "") {
                 walletResults[blockchain] = balance;
                 hasBalance = true; // Jika ada saldo, set flag ke true
             }
-        }
+        });
+
+        // Tunggu semua promise blockchain selesai
+        await Promise.all(blockchainPromises);
 
         // Jika ada saldo valid, simpan ke hasil
         if (hasBalance) {
             results[mnemonic] = walletResults;
         }
+    });
 
-        // Tambahkan delay 1 detik antara setiap pengecekan
-        await delay(1000); // 1 detik
-    }
+    // Tunggu semua pengecekan selesai
+    await Promise.all(promises);
 
     // Simpan hasil ke file hanya jika ada saldo
     saveResultsToFile(results, "output.json");
