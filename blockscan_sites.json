@@ -1,22 +1,47 @@
 {
-  "ethereum": {
-    "url": "https://etherscan.io/address/{address}",
-    "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
-  },
-  "binance-smart-chain": {
-    "url": "https://bscscan.com/address/{address}",
-    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
-  },
-  "polygon": {
-    "url": "https://polygonscan.com/address/{address}",
-    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
-  },
-  "avalanche": {
-    "url": "https://snowtrace.io/address/{address}",
-    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
-  },
-  "optimism": {
-    "url": "https://optimistic.etherscan.io/address/{address}",
-    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
+    "eth": {
+      "url": "https://etherscan.io/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "polygon": {
+      "url": "https://polygonscan.com/address/{address}",
+      "xpath": "//span[contains(text(), 'POL')]/text()"
+    },
+    "bsc": {
+      "url": "https://bscscan.com/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'BNB Balance')]/following-sibling::div//div//text()"
+    },
+    "avax": {
+      "url": "https://snowtrace.io/address/{address}",
+      "xpath": "//div[@class='grid grid-cols-12 items-center']//span[contains(text(), 'AVAX')]/text()"
+    },
+    "op": {
+      "url": "https://optimistic.etherscan.io/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "vana": {
+      "url": "https://vanascan.io/address/{address}",
+      "xpath": "//span//p[contains(text(), 'VANA')]/text()"
+    },
+    "linea": {
+      "url": "https://lineascan.build/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "blast": {
+      "url": "https://blastscan.io/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "arbitrum": {
+      "url": "https://arbiscan.io/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "base": {
+      "url": "https://basescan.org/address/{address}",
+      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    },
+    "zksync": {
+      "url": "https://explorer.zksync.io/address/{address}",
+      "xpath": "//div[@class='balance-data-value']/text()"
+    }
   }
-}
+  
