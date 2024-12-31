@@ -6,7 +6,7 @@ with open('english_wordlist.txt', 'r') as file:
 
 # Menentukan jumlah kata per grup dan jumlah grup
 words_per_group = 12
-num_groups = 100000
+num_groups = 3
 
 # Membuat grup dengan kata-kata yang sama tetapi dalam urutan yang diacak
 groups = []
@@ -19,7 +19,7 @@ groups_as_string = ', '.join(f'"{group}"' for group in groups)  # Format menjadi
 env_content = f'MNEMONICS_EVM=[{groups_as_string}]'
 
 # Menyimpan hasil ke dalam file .env
-output_filename = 'output_2048.env'
+output_filename = '.env'
 with open(output_filename, 'w') as output_file:
     output_file.write(env_content)
 
