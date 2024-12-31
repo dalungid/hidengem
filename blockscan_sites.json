@@ -1,0 +1,22 @@
+{
+  "ethereum": {
+    "url": "https://etherscan.io/address/{address}",
+    "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+  },
+  "binance-smart-chain": {
+    "url": "https://bscscan.com/address/{address}",
+    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
+  },
+  "polygon": {
+    "url": "https://polygonscan.com/address/{address}",
+    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
+  },
+  "avalanche": {
+    "url": "https://snowtrace.io/address/{address}",
+    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
+  },
+  "optimism": {
+    "url": "https://optimistic.etherscan.io/address/{address}",
+    "xpath": "//div[@class='col-md-8']//span[@class='text-bold']"
+  }
+}
