@@ -71,3 +71,7 @@ function filterValidMnemonics() {
 
 // Menjalankan filter
 filterValidMnemonics();
+<<<<<<< HEAD
+=======
+
+>>>>>>> 9251e1e5264977930fd9c9db32feb965dc143f7d

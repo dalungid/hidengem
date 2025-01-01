@@ -1,47 +1,59 @@
 {
-    "eth": {
-      "url": "https://etherscan.io/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+  "explorers": [
+    {
+      "name": "Ethereum",
+      "url": "https://etherscan.io/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "polygon": {
-      "url": "https://polygonscan.com/address/{address}",
-      "xpath": "//span[contains(text(), 'POL')]/text()"
+    {
+      "name": "Polygon",
+      "url": "https://polygonscan.com/address/",
+      "xpath": "//div[contains(text(),'POL Balance')]/following-sibling::div/div"
     },
-    "bsc": {
-      "url": "https://bscscan.com/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'BNB Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "BSC",
+      "url": "https://bscscan.com/address/",
+      "xpath": "//div[contains(text(),'BNB Balance')]/following-sibling::div/div"
     },
-    "avax": {
-      "url": "https://snowtrace.io/address/{address}",
-      "xpath": "//div[@class='grid grid-cols-12 items-center']//span[contains(text(), 'AVAX')]/text()"
+    {
+      "name": "Avalanche",
+      "url": "https://avascan.info/address/",
+      "xpath": "//span[contains(text(),'Balance:')]/following-sibling::span"
     },
-    "op": {
-      "url": "https://optimistic.etherscan.io/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "Optimism",
+      "url": "https://optimistic.etherscan.io/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "vana": {
-      "url": "https://vanascan.io/address/{address}",
-      "xpath": "//span//p[contains(text(), 'VANA')]/text()"
+    {
+      "name": "Vana",
+      "url": "https://vanascan.io/address/",
+      "xpath": "//span[@class='chakra-text css-1gdcvrl']"
     },
-    "linea": {
-      "url": "https://lineascan.build/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "Linea",
+      "url": "https://lineascan.build/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "blast": {
-      "url": "https://blastscan.io/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "Blast",
+      "url": "https://blastscan.io/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "arbitrum": {
-      "url": "https://arbiscan.io/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "Arbitrum",
+      "url": "https://arbiscan.io/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "base": {
-      "url": "https://basescan.org/address/{address}",
-      "xpath": "//div[contains(@class, 'text-cap') and contains(text(), 'ETH Balance')]/following-sibling::div//div//text()"
+    {
+      "name": "Base",
+      "url": "https://basescan.org/address/",
+      "xpath": "//div[contains(text(),'ETH Balance')]/following-sibling::div/div"
     },
-    "zksync": {
-      "url": "https://explorer.zksync.io/address/{address}",
-      "xpath": "//div[@class='balance-data-value']/text()"
+    {
+      "name": "zkSync",
+      "url": "https://explorer.zksync.io/address/",
+      "xpath": "//div[@class='balance-data-value']"
     }
-  }
-  
+  ]
+}
