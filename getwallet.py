@@ -6,7 +6,7 @@ with open('english_wordlist.txt', 'r') as file:
 
 # Menentukan jumlah kata per grup dan jumlah grup
 words_per_group = 12
-num_groups = 3
+num_groups = 500000
 
 # Membuat grup dengan kata-kata yang sama tetapi dalam urutan yang diacak
 groups = []
@@ -24,3 +24,4 @@ with open(output_filename, 'w') as output_file:
     output_file.write(env_content)
 
 print(f"Hasil telah disimpan ke file {output_filename}")
+

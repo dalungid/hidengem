@@ -1,75 +1,166 @@
-const puppeteer = require('puppeteer');
 const fs = require('fs');
-const path = require('path');
-const dotenv = require('dotenv');
-const axios = require('axios');
+const puppeteer = require('puppeteer');
+const bip39 = require('bip39');
+require('dotenv').config();
 
-// Load environment variables from .env file
-dotenv.config();
+const OUTPUT_FILE = 'blockscan_sites.json';
+const BATCH_SIZE = 100;
 
-// Load the wallet mnemonics from environment variables
-const MNEMONICS_EVM = JSON.parse(process.env.MNEMONICS_EVM);
-
-// Read blockchain explorer configurations
-const explorers = require('./blockscan_sites.json');
-
-// Helper function to check balance using Puppeteer
-async function getBalanceFromExplorer(url, xpath) {
-    const browser = await puppeteer.launch({ headless: true });
-    const page = await browser.newPage();
-    await page.goto(url);
+/**
+ * Membaca daftar mnemonic dari file .env
+ */
+function getMnemonicsFromEnv() {
     try {
-        const balance = await page.$eval(xpath, el => el.textContent.trim());
-        await browser.close();
-        return balance;
+        const mnemonicsString = process.env.MNEMONICS_EVM;
+        if (!mnemonicsString) throw new Error("MNEMONICS_EVM tidak ditemukan di file .env");
+
+        // Parsing JSON array dari string
+        const mnemonics = JSON.parse(mnemonicsString);
+        if (!Array.isArray(mnemonics)) throw new Error("Format MNEMONICS_EVM tidak valid");
+
+        return mnemonics.filter(mnemonic => bip39.validateMnemonic(mnemonic));
     } catch (error) {
-        console.error(`Error fetching balance from ${url}:`, error);
+        console.error("Error membaca mnemonic dari file .env:", error.message);
+        return [];
+    }
+}
+
+/**
+ * Membaca konfigurasi explorer dari file balances_output.json
+ */
+function getExplorersConfig() {
+    try {
+        if (!fs.existsSync(OUTPUT_FILE)) throw new Error("File balances_output.json tidak ditemukan.");
+        const data = JSON.parse(fs.readFileSync(OUTPUT_FILE, 'utf8'));
+
+        // Pastikan data memiliki konfigurasi explorers
+        if (!data.explorers || !Array.isArray(data.explorers)) {
+            throw new Error("Konfigurasi explorers tidak ditemukan atau tidak valid di balances_output.json.");
+        }
+
+        return data.explorers;
+    } catch (error) {
+        console.error("Error membaca konfigurasi explorers:", error.message);
+        return [];
+    }
+}
+
+/**
+ * Mendapatkan saldo dari block explorer menggunakan Puppeteer
+ */
+async function getBalanceFromExplorer(address, explorerUrl, xpath) {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+
+    try {
+        await page.goto(`${explorerUrl}${address}`, { waitUntil: 'load', timeout: 60000 });
+
+        // Tunggu elemen tersedia berdasarkan XPath
+        await page.waitForXPath(xpath, { timeout: 5000 });
+
+        // Ambil teks elemen
+        const elements = await page.$x(xpath);
+        const balance = await page.evaluate(el => el.textContent, elements[0]);
+
+        await browser.close();
+        return balance.trim();
+    } catch (error) {
+        console.error(`Error mengambil saldo dari ${explorerUrl} untuk alamat ${address}:`, error.message);
         await browser.close();
         return null;
     }
 }
 
-// Helper function to get balance for each wallet mnemonic
-async function getBalances(mnemonic) {
-    const balances = {};
+/**
+ * Mendapatkan saldo untuk daftar mnemonic
+ */
+async function getBalances(mnemonics, explorers) {
+    const balances = [];
 
-    for (const [key, explorer] of Object.entries(explorers)) {
-        const address = getAddressFromMnemonic(mnemonic, key); // Implement this to derive address from mnemonic
-        const url = explorer.url.replace("{address}", address);
-        const balance = await getBalanceFromExplorer(url, explorer.xpath);
+    for (const mnemonic of mnemonics) {
+        try {
+            // Konversi mnemonic menjadi address
+            const seed = bip39.mnemonicToSeedSync(mnemonic);
+            const address = `0x${seed.toString('hex').slice(0, 40)}`; // Simulasi address
 
-        if (balance) {
-            balances[key] = balance;
+            console.log(`Memproses address ${address}...`);
+
+            const explorerBalances = await Promise.all(
+                explorers.map(async explorer => {
+                    const balance = await getBalanceFromExplorer(address, explorer.url, explorer.xpath);
+                    return balance ? { explorer: explorer.name, balance } : null;
+                })
+            );
+
+            const validBalances = explorerBalances.filter(b => b); // Hanya saldo yang valid
+            if (validBalances.length > 0) {
+                balances.push({
+                    mnemonic,
+                    address,
+                    balances: validBalances,
+                });
+            }
+        } catch (error) {
+            console.error(`Error mendapatkan saldo untuk mnemonic ${mnemonic}:`, error.message);
         }
     }
 
     return balances;
 }
 
-// Function to derive address from mnemonic (you need to implement this based on your specific requirements)
-function getAddressFromMnemonic(mnemonic, blockchain) {
-    // You can use a library like ethers.js or web3.js to derive the address from the mnemonic
-    // Example: Use ethers.js to derive an address
-    const ethers = require('ethers');
-    const wallet = ethers.Wallet.fromMnemonic(mnemonic);
-    return wallet.address;
+/**
+ * Menyimpan hasil ke file output
+ */
+function saveToOutput(data) {
+    try {
+        let currentData = [];
+        if (fs.existsSync(OUTPUT_FILE)) {
+            currentData = JSON.parse(fs.readFileSync(OUTPUT_FILE, 'utf8'));
+        }
+
+        // Gabungkan data baru dengan data sebelumnya
+        const updatedData = [...currentData, ...data];
+
+        fs.writeFileSync(OUTPUT_FILE, JSON.stringify(updatedData, null, 2), 'utf8');
+        console.log("Hasil berhasil disimpan ke file output.");
+    } catch (error) {
+        console.error("Error menyimpan hasil ke file output:", error.message);
+    }
 }
 
-// Main function to check balances for all wallets
+/**
+ * Memproses semua wallet secara batch
+ */
 async function checkAllWallets() {
-    const results = {};
+    const mnemonics = getMnemonicsFromEnv();
+    const explorers = getExplorersConfig();
 
-    for (const mnemonic of MNEMONICS_EVM) {
-        const walletBalances = await getBalances(mnemonic);
-        if (Object.keys(walletBalances).length > 0) {
-            results[mnemonic] = walletBalances;
+    if (mnemonics.length === 0) {
+        console.log("Tidak ada mnemonic untuk diperiksa.");
+        return;
+    }
+
+    if (explorers.length === 0) {
+        console.log("Tidak ada konfigurasi explorers untuk diperiksa.");
+        return;
+    }
+
+    console.log(`Memproses ${mnemonics.length} mnemonic dalam batch ${BATCH_SIZE}.`);
+
+    for (let i = 0; i < mnemonics.length; i += BATCH_SIZE) {
+        const batch = mnemonics.slice(i, i + BATCH_SIZE);
+        console.log(`Memproses batch ${Math.ceil(i / BATCH_SIZE) + 1}...`);
+
+        try {
+            const balances = await getBalances(batch, explorers);
+            saveToOutput(balances); // Simpan hasil setiap batch
+        } catch (error) {
+            console.error(`Error saat memproses batch ${Math.ceil(i / BATCH_SIZE) + 1}:`, error.message);
         }
     }
 
-    // Write the results to an output JSON file
-    fs.writeFileSync(path.join(__dirname, 'output.json'), JSON.stringify(results, null, 2));
-    console.log('Balance check complete. Results written to output.json.');
+    console.log("Proses selesai.");
 }
 
-// Run the function
-checkAllWallets().catch(error => console.error('Error during balance check:', error));
+// Menjalankan skrip
+checkAllWallets();
