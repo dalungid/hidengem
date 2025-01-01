@@ -46,7 +46,7 @@ function chunkArray(array, chunkSize) {
 
 // Jalankan proses
 async function main() {
-    const mnemonics = JSON.parse(fs.readFileSync('mnemonics.json'));
+    const mnemonics = JSON.parse(fs.readFileSync('evm.json'));
     const chunks = chunkArray(mnemonics, 50); // Proses per batch
 
     for (const batch of chunks) {
