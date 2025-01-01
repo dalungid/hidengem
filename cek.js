@@ -1,166 +1,101 @@
-const fs = require('fs');
-const puppeteer = require('puppeteer');
-const bip39 = require('bip39');
 require('dotenv').config();
+const puppeteer = require('puppeteer');
+const fs = require('fs').promises;
 
-const OUTPUT_FILE = 'blockscan_sites.json';
-const BATCH_SIZE = 100;
-
-/**
- * Membaca daftar mnemonic dari file .env
- */
-function getMnemonicsFromEnv() {
+// Memuat file blockscan_sites.json
+const loadExplorersConfig = async () => {
     try {
-        const mnemonicsString = process.env.MNEMONICS_EVM;
-        if (!mnemonicsString) throw new Error("MNEMONICS_EVM tidak ditemukan di file .env");
-
-        // Parsing JSON array dari string
-        const mnemonics = JSON.parse(mnemonicsString);
-        if (!Array.isArray(mnemonics)) throw new Error("Format MNEMONICS_EVM tidak valid");
-
-        return mnemonics.filter(mnemonic => bip39.validateMnemonic(mnemonic));
+        const data = await fs.readFile('blockscan_sites.json', 'utf-8');
+        const config = JSON.parse(data);
+        return config.explorers || [];
     } catch (error) {
-        console.error("Error membaca mnemonic dari file .env:", error.message);
+        console.error('Error membaca konfigurasi explorers: ', error.message);
         return [];
     }
-}
+};
 
-/**
- * Membaca konfigurasi explorer dari file balances_output.json
- */
-function getExplorersConfig() {
-    try {
-        if (!fs.existsSync(OUTPUT_FILE)) throw new Error("File balances_output.json tidak ditemukan.");
-        const data = JSON.parse(fs.readFileSync(OUTPUT_FILE, 'utf8'));
+// Lokasi balances_output.json
+const OUTPUT_FILE = 'balances_output.json';
 
-        // Pastikan data memiliki konfigurasi explorers
-        if (!data.explorers || !Array.isArray(data.explorers)) {
-            throw new Error("Konfigurasi explorers tidak ditemukan atau tidak valid di balances_output.json.");
-        }
-
-        return data.explorers;
-    } catch (error) {
-        console.error("Error membaca konfigurasi explorers:", error.message);
-        return [];
-    }
-}
-
-/**
- * Mendapatkan saldo dari block explorer menggunakan Puppeteer
- */
-async function getBalanceFromExplorer(address, explorerUrl, xpath) {
-    const browser = await puppeteer.launch();
+// Fungsi untuk membaca saldo dari explorer
+async function getBalanceFromExplorer(browser, explorer, address) {
     const page = await browser.newPage();
+    await page.goto(explorer.url + address, { waitUntil: 'domcontentloaded' });
 
     try {
-        await page.goto(`${explorerUrl}${address}`, { waitUntil: 'load', timeout: 60000 });
-
-        // Tunggu elemen tersedia berdasarkan XPath
-        await page.waitForXPath(xpath, { timeout: 5000 });
-
-        // Ambil teks elemen
-        const elements = await page.$x(xpath);
-        const balance = await page.evaluate(el => el.textContent, elements[0]);
-
-        await browser.close();
-        return balance.trim();
+        const balance = await page.$eval(
+            explorer.balanceXPath,
+            (el) => el.textContent.trim()
+        );
+        await page.close();
+        return balance;
     } catch (error) {
-        console.error(`Error mengambil saldo dari ${explorerUrl} untuk alamat ${address}:`, error.message);
-        await browser.close();
+        console.error(`Gagal membaca saldo dari ${explorer.name} untuk ${address}: ${error.message}`);
+        await page.close();
         return null;
     }
 }
 
-/**
- * Mendapatkan saldo untuk daftar mnemonic
- */
-async function getBalances(mnemonics, explorers) {
-    const balances = [];
+// Fungsi untuk membaca saldo dari semua explorers
+async function getBalances(mnemonic) {
+    const balances = {};
+    const walletAddress = getAddressFromMnemonic(mnemonic);
+    const explorers = await loadExplorersConfig();
 
-    for (const mnemonic of mnemonics) {
-        try {
-            // Konversi mnemonic menjadi address
-            const seed = bip39.mnemonicToSeedSync(mnemonic);
-            const address = `0x${seed.toString('hex').slice(0, 40)}`; // Simulasi address
+    const browser = await puppeteer.launch({
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
 
-            console.log(`Memproses address ${address}...`);
-
-            const explorerBalances = await Promise.all(
-                explorers.map(async explorer => {
-                    const balance = await getBalanceFromExplorer(address, explorer.url, explorer.xpath);
-                    return balance ? { explorer: explorer.name, balance } : null;
-                })
-            );
-
-            const validBalances = explorerBalances.filter(b => b); // Hanya saldo yang valid
-            if (validBalances.length > 0) {
-                balances.push({
-                    mnemonic,
-                    address,
-                    balances: validBalances,
-                });
-            }
-        } catch (error) {
-            console.error(`Error mendapatkan saldo untuk mnemonic ${mnemonic}:`, error.message);
+    for (const explorer of explorers) {
+        const balance = await getBalanceFromExplorer(browser, explorer, walletAddress);
+        if (balance) {
+            balances[explorer.name] = balance;
         }
     }
 
+    await browser.close();
     return balances;
 }
 
-/**
- * Menyimpan hasil ke file output
- */
-function saveToOutput(data) {
-    try {
-        let currentData = [];
-        if (fs.existsSync(OUTPUT_FILE)) {
-            currentData = JSON.parse(fs.readFileSync(OUTPUT_FILE, 'utf8'));
-        }
-
-        // Gabungkan data baru dengan data sebelumnya
-        const updatedData = [...currentData, ...data];
-
-        fs.writeFileSync(OUTPUT_FILE, JSON.stringify(updatedData, null, 2), 'utf8');
-        console.log("Hasil berhasil disimpan ke file output.");
-    } catch (error) {
-        console.error("Error menyimpan hasil ke file output:", error.message);
-    }
+// Fungsi untuk mendapatkan address dari mnemonic
+function getAddressFromMnemonic(mnemonic) {
+    const { Wallet } = require('ethers');
+    const wallet = Wallet.fromMnemonic(mnemonic);
+    return wallet.address;
 }
 
-/**
- * Memproses semua wallet secara batch
- */
+// Fungsi utama untuk memeriksa saldo dari semua MNEMONICS
 async function checkAllWallets() {
-    const mnemonics = getMnemonicsFromEnv();
-    const explorers = getExplorersConfig();
+    let output = {};
 
-    if (mnemonics.length === 0) {
-        console.log("Tidak ada mnemonic untuk diperiksa.");
-        return;
+    try {
+        const data = await fs.readFile(OUTPUT_FILE, 'utf-8');
+        output = JSON.parse(data);
+    } catch {
+        console.log('balances_output.json tidak ditemukan, membuat baru...');
     }
 
-    if (explorers.length === 0) {
-        console.log("Tidak ada konfigurasi explorers untuk diperiksa.");
-        return;
-    }
+    const MNEMONICS = JSON.parse(process.env.MNEMONICS_EVM);
 
-    console.log(`Memproses ${mnemonics.length} mnemonic dalam batch ${BATCH_SIZE}.`);
-
-    for (let i = 0; i < mnemonics.length; i += BATCH_SIZE) {
-        const batch = mnemonics.slice(i, i + BATCH_SIZE);
-        console.log(`Memproses batch ${Math.ceil(i / BATCH_SIZE) + 1}...`);
-
+    for (const mnemonic of MNEMONICS) {
         try {
-            const balances = await getBalances(batch, explorers);
-            saveToOutput(balances); // Simpan hasil setiap batch
+            console.log(`Memeriksa saldo untuk mnemonic: ${mnemonic}`);
+            const balances = await getBalances(mnemonic);
+
+            if (Object.keys(balances).length > 0) {
+                output[mnemonic] = balances;
+            }
         } catch (error) {
-            console.error(`Error saat memproses batch ${Math.ceil(i / BATCH_SIZE) + 1}:`, error.message);
+            console.error(`Error mendapatkan saldo untuk mnemonic: ${mnemonic} - ${error.message}`);
         }
     }
 
-    console.log("Proses selesai.");
+    await fs.writeFile(OUTPUT_FILE, JSON.stringify(output, null, 2));
+    console.log('Pemeriksaan saldo selesai. Hasil disimpan di balances_output.json');
 }
 
-// Menjalankan skrip
-checkAllWallets();
+// Jalankan skrip
+checkAllWallets().catch((error) => {
+    console.error(`Terjadi kesalahan: ${error.message}`);
+});
