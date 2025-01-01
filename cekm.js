@@ -2,6 +2,8 @@ const fs = require('fs');
 const bip39 = require('bip39');
 require('dotenv').config(); // Untuk membaca file .env
 
+const ENV_FILE = '.env'; // Nama file .env
+
 /**
  * Fungsi untuk memvalidasi mnemonic BIP-39
  * @param {string} mnemonic - Mnemonic yang akan divalidasi
@@ -31,9 +33,25 @@ function getMnemonicsFromEnv() {
 }
 
 /**
- * Proses validasi mnemonic
+ * Menyimpan daftar mnemonic yang valid ke file .env
+ * @param {string[]} validMnemonics - Daftar mnemonic yang valid
  */
-function validateMnemonics() {
+function saveValidMnemonicsToEnv(validMnemonics) {
+    try {
+        const updatedEnv = fs
+            .readFileSync(ENV_FILE, 'utf8')
+            .replace(/MNEMONICS_EVM=\[.*?\]/s, `MNEMONICS_EVM=${JSON.stringify(validMnemonics)}`);
+        fs.writeFileSync(ENV_FILE, updatedEnv, 'utf8');
+        console.log("File .env berhasil diperbarui dengan mnemonic yang valid.");
+    } catch (error) {
+        console.error("Error menyimpan mnemonic ke file .env:", error.message);
+    }
+}
+
+/**
+ * Memvalidasi mnemonic dan menghapus yang tidak valid
+ */
+function filterValidMnemonics() {
     const mnemonics = getMnemonicsFromEnv();
 
     if (mnemonics.length === 0) {
@@ -41,11 +59,15 @@ function validateMnemonics() {
         return;
     }
 
-    mnemonics.forEach((mnemonic, index) => {
-        const isValid = isValidMnemonic(mnemonic);
-        console.log(`Mnemonic ${index + 1} is valid: ${isValid}`);
-    });
+    const validMnemonics = mnemonics.filter(isValidMnemonic);
+
+    console.log(`Mnemonic valid: ${validMnemonics.length}, Mnemonic tidak valid: ${mnemonics.length - validMnemonics.length}`);
+    if (validMnemonics.length > 0) {
+        saveValidMnemonicsToEnv(validMnemonics);
+    } else {
+        console.log("Tidak ada mnemonic valid yang ditemukan.");
+    }
 }
 
-// Menjalankan validasi
-validateMnemonics();
+// Menjalankan filter
+filterValidMnemonics();
