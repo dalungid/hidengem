@@ -1,90 +1,113 @@
-require('dotenv').config();
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+const dotenv = require('dotenv');
+const pLimit = require('p-limit');
 const fs = require('fs');
-const path = require('path');
 
-const OUTPUT_FILE = 'balances_output.json'; // Lokasi file output
-const EXPLORERS_CONFIG = 'blockscan_sites.json'; // Lokasi file konfigurasi explorer
+// Load environment variables
+dotenv.config();
+const MNEMONICS_EVM = JSON.parse(process.env.MNEMONICS_EVM); // Ambil mnemonic dari .env
+const OUTPUT_FILE = 'balances_output.json'; // Output file untuk menyimpan hasil
+const EXPLORERS = [
+    { name: "blockscan", url: "https://blockscan.com/address/" },
+    { name: "polygon", url: "https://polygonscan.com/address/" },
+    { name: "bsc", url: "https://bscscan.com/address/" },
+    { name: "avax", url: "https://snowtrace.io/address/" },
+    { name: "op", url: "https://optimistic.etherscan.io/address/" },
+    { name: "vanascan", url: "https://vanascan.io/address/" },
+    { name: "lineascan", url: "https://explorer.linea.build/address/" },
+    { name: "blastscan", url: "https://blastscan.io/address/" },
+    { name: "arb", url: "https://arbiscan.io/address/" },
+    { name: "base", url: "https://basescan.org/address/" },
+    { name: "zksync", url: "https://explorer.zksync.io/address/" }
+];
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// Limit parallel requests
+const limit = pLimit(5); // Batasi maksimal 5 request secara paralel
 
-// Membaca konfigurasi explorer dari file JSON
-async function loadExplorersConfig() {
-    const data = fs.readFileSync(EXPLORERS_CONFIG);
-    return JSON.parse(data);
+async function getBalanceFromExplorer(browser, explorer, walletAddress) {
+    try {
+        const page = await browser.newPage();
+        await page.goto(`${explorer.url}${walletAddress}`);
+
+        let balance;
+
+        // Cek apakah saldo ETH di Blockscan
+        if (explorer.name === "blockscan") {
+            balance = await page.$eval('.text-muted', el => el.textContent.trim());
+        } else if (explorer.name === "polygon") {
+            balance = await page.$eval('.d-flex', el => el.textContent.trim());
+        } else if (explorer.name === "bsc") {
+            balance = await page.$eval('.d-flex', el => el.textContent.trim());
+        } else if (explorer.name === "avax") {
+            balance = await page.$eval('.grid .col-span-12', el => el.textContent.trim());
+        } else if (explorer.name === "op") {
+            balance = await page.$eval('.d-flex', el => el.textContent.trim());
+        } else if (explorer.name === "vanascan") {
+            balance = await page.$eval('.chakra-text', el => el.textContent.trim());
+        } else if (explorer.name === "lineascan") {
+            balance = await page.$eval('.balance-data-value', el => el.textContent.trim());
+        } else if (explorer.name === "blastscan") {
+            balance = await page.$eval('.text-muted', el => el.textContent.trim());
+        } else if (explorer.name === "arb") {
+            balance = await page.$eval('.d-flex', el => el.textContent.trim());
+        } else if (explorer.name === "base") {
+            balance = await page.$eval('.d-flex', el => el.textContent.trim());
+        } else if (explorer.name === "zksync") {
+            balance = await page.$eval('.balance-data-value', el => el.textContent.trim());
+        }
+
+        await page.close();
+        return balance;
+    } catch (error) {
+        console.error(`Error getting balance from ${explorer.name} for address ${walletAddress}:`, error);
+        return null;
+    }
 }
 
-// Mengambil alamat dari mnemonic
+async function checkAllWallets() {
+    const browser = await puppeteer.launch({
+        headless: true,
+        executablePath: '/usr/bin/google-chrome-stable', // Jika menggunakan Chrome lokal
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process', '--no-zygote']
+    });
+
+    const results = [];
+
+    for (const mnemonic of MNEMONICS_EVM) {
+        const walletAddress = getAddressFromMnemonic(mnemonic);
+        const walletResult = {
+            mnemonic,
+            balances: {}
+        };
+
+        // Cek saldo dari setiap explorer
+        for (const explorer of EXPLORERS) {
+            await limit(async () => {
+                const balance = await getBalanceFromExplorer(browser, explorer, walletAddress);
+                if (balance && balance !== '0') {
+                    walletResult.balances[explorer.name] = balance;
+                }
+            });
+        }
+
+        if (Object.keys(walletResult.balances).length > 0) {
+            results.push(walletResult);
+        }
+    }
+
+    await browser.close();
+
+    // Simpan hasil ke file JSON
+    fs.writeFileSync(OUTPUT_FILE, JSON.stringify(results, null, 2), 'utf-8');
+    console.log(`Balances saved to ${OUTPUT_FILE}`);
+}
+
 function getAddressFromMnemonic(mnemonic) {
     const { Wallet } = require('ethers');
     const wallet = Wallet.fromMnemonic(mnemonic);
     return wallet.address;
 }
 
-// Mendapatkan saldo dari setiap explorer
-async function getBalanceFromExplorer(browser, explorer, walletAddress) {
-    let balance = null;
-
-    try {
-        const page = await browser.newPage();
-        await page.goto(explorer.url.replace('ADDRESS', walletAddress), { waitUntil: 'networkidle2' });
-
-        // Menyesuaikan selector berdasarkan explorer
-        const balanceSelector = explorer.balanceSelector;
-        balance = await page.$eval(balanceSelector, (element) => {
-            return element.textContent.trim();
-        });
-
-        console.log(`${explorer.name}: ${balance}`);
-    } catch (error) {
-        console.error(`Error getting balance from ${explorer.name}: ${error.message}`);
-    }
-
-    return balance;
-}
-
-// Mendapatkan saldo untuk seluruh mnemonic
-async function getBalances(mnemonic) {
-    const balances = {};
-    const walletAddress = getAddressFromMnemonic(mnemonic);
-    const explorers = await loadExplorersConfig();
-
-    const browser = await puppeteer.launch({
-        headless: true, // Gunakan mode non-headless jika perlu
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    for (const explorer of explorers) {
-        const balance = await getBalanceFromExplorer(browser, explorer, walletAddress);
-        if (balance) {
-            balances[explorer.name] = balance;
-        }
-        // Delay 500 ms setelah setiap pengecekan saldo
-        await delay(500);
-    }
-
-    await browser.close();
-    return balances;
-}
-
-// Memeriksa seluruh mnemonic
-async function checkAllWallets() {
-    const mnemonics = JSON.parse(process.env.MNEMONICS_EVM); // Mengambil mnemonic dari .env
-    const allBalances = {};
-
-    for (const mnemonic of mnemonics) {
-        console.log(`Checking balance for mnemonic: ${mnemonic}`);
-        const balances = await getBalances(mnemonic);
-        if (Object.keys(balances).length > 0) {
-            allBalances[mnemonic] = balances;
-        }
-    }
-
-    // Simpan hasil ke dalam file output
-    fs.writeFileSync(OUTPUT_FILE, JSON.stringify(allBalances, null, 2));
-    console.log('All balances have been checked and saved.');
-}
-
-checkAllWallets().catch((error) => {
+checkAllWallets().catch(error => {
     console.error('Error checking all wallet balances:', error);
 });
